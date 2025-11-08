@@ -7,7 +7,7 @@ from sqlalchemy import text
 # KONFIGURASI DATABASE RAILWAY
 # ============================================================
 # Ganti URL ini sesuai database Railway kamu (gunakan PUBLIC URL)
-DATABASE_URL = "postgresql://postgres:aVmKnjYKMMBfKfJeUqYxuERctVpeSykF@nozomi.proxy.rlwy.net:34522/railway"
+DATABASE_URL = "postgresql://postgres:jernqksJptfFDenntwFLVvmYXkCxtnkW@ballast.proxy.rlwy.net:10405/railway"
 
 # ============================================================
 # SETUP ENGINE & SESSION
