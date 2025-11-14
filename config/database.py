@@ -1,24 +1,31 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError, OperationalError
+import time
 
 # ============================================================
 # KONFIGURASI DATABASE RAILWAY
 # ============================================================
-# Ganti URL ini sesuai database Railway kamu (gunakan PUBLIC URL)
 DATABASE_URL = "postgresql://postgres:jernqksJptfFDenntwFLVvmYXkCxtnkW@ballast.proxy.rlwy.net:10405/railway"
 
 # ============================================================
 # SETUP ENGINE & SESSION
 # ============================================================
-# Engine: penghubung antara SQLAlchemy dan PostgreSQL
-engine = create_engine(DATABASE_URL, echo=True)
+# Opsi penting:
+# - pool_pre_ping=True  → auto cek koneksi sebelum query (hindari broken pipe)
+# - pool_recycle=1800   → ganti koneksi setiap 30 menit (hindari idle timeout)
+# - pool_size=5 & max_overflow=10 → atur pool kecil tapi fleksibel
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    pool_size=5,
+    max_overflow=10,
+)
 
-# Session: objek untuk melakukan query
+# Session & Base setup
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Base: class dasar untuk semua model ORM
 Base = declarative_base()
 
 # ============================================================
@@ -33,11 +40,39 @@ def get_db():
         db.close()
 
 # ============================================================
-# OPSIONAL: CEK KONEKSI OTOMATIS SAAT STARTUP
+# CEK KONEKSI OTOMATIS DENGAN RETRY (ANTISLEEP MODE)
 # ============================================================
-try:
-    with engine.connect() as conn:
-        result = conn.execute(text("SELECT NOW();"))
-        print("✅ Database connected successfully at:", result.scalar())
-except SQLAlchemyError as e:
-    print("❌ Database connection failed:", str(e))
+def test_connection(retries=5, delay=5):
+    """Coba koneksi ke database dengan retry jika gagal."""
+    for attempt in range(1, retries + 1):
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT NOW();"))
+                print(f"✅ Database connected successfully at: {result.scalar()}")
+                return
+        except OperationalError as e:
+            print(f"⚠️ Attempt {attempt} failed: {e}")
+            if attempt < retries:
+                print(f"🔁 Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                print("❌ Database connection failed after multiple attempts.")
+                
+
+        # ============================================================
+# CONTEXT MANAGER UNTUK SESSION AMAN
+# ============================================================
+from contextlib import contextmanager
+
+@contextmanager
+def with_session():
+    """Context manager untuk aman membuka & menutup sesi database."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Jalankan saat startup
+test_connection()
+
